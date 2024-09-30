@@ -83,17 +83,14 @@ function processSprites(csvData, spriteFiles) {
         const notes = spriteData.notes || null;
 
         // Handle artist splitting by ' & ', or use null if no artists
-        const artists = spriteData.artist ? spriteData.artist.split(' & ') : [null];
+        const artists = spriteData.artist ? spriteData.artist.split(' & ') : null;
 
-        // For each artist, create an entry
-        artists.forEach(artist => {
-            processedData.push({
-                sprite_id: spriteData.id,
-                sprite_type: spriteData.type,
-                base_id: spriteData.type === 'alt' ? base_id : spriteData.id,  // Set base_id for alt and main types
-                artist: artist,
-                notes: notes
-            });
+        processedData.push({
+            sprite_id: spriteData.id,
+            sprite_type: spriteData.type,
+            base_id: spriteData.type === 'alt' ? base_id : spriteData.id,  // Set base_id for alt and main types
+            artists: artists,
+            notes: notes
         });
     });
 
@@ -110,7 +107,7 @@ function processSprites(csvData, spriteFiles) {
         // Next, handle specific sprite ordering
         const isMainA = !/[a-zA-Z]/.test(a.sprite_id) && !a.sprite_id.includes(' by ');
         const isMainB = !/[a-zA-Z]/.test(b.sprite_id) && !b.sprite_id.includes(' by ');
-f
+
         const isAltA = /[a-zA-Z]$/.test(a.sprite_id) && !a.sprite_id.includes(' by ');
         const isAltB = /[a-zA-Z]$/.test(b.sprite_id) && !b.sprite_id.includes(' by ');
 
@@ -139,11 +136,10 @@ f
 async function createArtistsTable(db) {
     await db.exec(`
         CREATE TABLE IF NOT EXISTS artists (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sprite_id TEXT,
+            sprite_id TEXT PRIMARY KEY,
             sprite_type TEXT,
             base_id TEXT,
-            artist TEXT,
+            artists JSON,
             notes TEXT
         )
     `);
@@ -153,7 +149,7 @@ async function createArtistsTable(db) {
 async function insertArtistsData(db, data) {
     const totalEntries = data.length;
     const stmt = await db.prepare(`
-        INSERT INTO artists (sprite_id, sprite_type, base_id, artist, notes)
+        INSERT OR REPLACE INTO artists (sprite_id, sprite_type, base_id, artists, notes)
         VALUES (?, ?, ?, ?, ?)
     `);
 
@@ -165,7 +161,7 @@ async function insertArtistsData(db, data) {
                 entry.sprite_id,
                 entry.sprite_type,
                 entry.base_id,
-                entry.artist,  // Insert artist name directly
+                entry.artists ? JSON.stringify(entry.artists) : null,  // Store artists as JSON array, or null if no artists
                 entry.notes ? entry.notes : null  // Store notes as is, or null if empty
             );
         }
@@ -217,13 +213,13 @@ async function main() {
         await insertArtistsData(db, processedData);
 
         // Save JSON file of this data
-        // const artistsArr = processedData.map(artist => ({
-        //     sprite_id: artist.sprite_id,
-        //     base_id: artist.base_id,
-        //     artist: artist.artist
-        // }));
+        const artistsArr = processedData.map(artist => ({
+            sprite_id: artist.sprite_id,
+            base_id: artist.base_id,
+            // type: artist.sprite_type,
+        }));
         
-        // await saveArtistsToJSON(artistsArr);
+        await saveArtistsToJSON(artistsArr)
 
         // Close the database
         await db.close();
